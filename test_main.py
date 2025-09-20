@@ -32,9 +32,7 @@ class TestMain(unittest.TestCase):
         main()
         with open("output.txt", "r") as file:
             content = file.read()
-            # Verifica se começa com o texto esperado
             self.assertTrue(content.startswith("Última execução: "))
-            # Verifica se tem pelo menos 20 caracteres (texto + timestamp)
             self.assertGreaterEqual(len(content), 20)
 
 if __name__ == "__main__":

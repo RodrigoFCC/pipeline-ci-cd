@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/python-app
+  VERSION: ${{ github.sha }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,54 +22,17 @@ jobs:
       with:
         python-version: '3.9'
     
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-    
     - name: Run tests
       run: |
         python -m unittest test_main.py -v
 
-  build-and-test:
-    runs-on: ubuntu-latest
-    needs: test  # Só executa se os testes passarem
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Create requirements.txt if missing
-      run: |
-        if [ ! -f requirements.txt ]; then
-          touch requirements.txt
-        fi
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Run main script
-      run: python main.py
-    
-    - name: Upload output file
-      uses: actions/upload-artifact@v4
-      with:
-        name: output-result
-        path: output.txt
-
   build-and-push-docker:
     runs-on: ubuntu-latest
-    needs: build-and-test  # Só executa se o build-and-test passar
+    needs: test
     if: github.ref == 'refs/heads/main'
     
     steps:
     - uses: actions/checkout@v4
-
-    - name: Create requirements.txt if missing
-      run: |
-        if [ ! -f requirements.txt ]; then
-          touch requirements.txt
-        fi
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -76,15 +43,87 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.DOCKERHUB_IMAGE }}
+        tags: |
+          type=raw,value=latest
+          type=sha,prefix=,suffix=,format=long
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v4
       with:
         context: .
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/python-app:latest
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Remove old images
+    - name: Clean up old images on DockerHub
       run: |
-        docker system prune -f
+        # Instalar dependências para a API do DockerHub
+        pip install dockerhub-api
+
+        # Script para remover tags antigas (exceto latest e a atual)
+        python -c "
+        import os
+        import requests
+        from dockerhub_api import DockerHub
+        
+        # Configurações
+        username = os.environ['DOCKERHUB_USERNAME']
+        password = os.environ['DOCKERHUB_TOKEN']
+        repository = 'python-app'
+        current_sha = os.environ['GITHUB_SHA']
+        
+        # Autenticar
+        auth = (username, password)
+        
+        # Obter todas as tags
+        response = requests.get(
+            f'https://hub.docker.com/v2/repositories/{username}/{repository}/tags/',
+            auth=auth
+        )
+        tags = response.json().get('results', [])
+        
+        # Manter apenas a tag latest e a atual
+        keep_tags = ['latest', current_sha[:12]]
+        
+        # Remover tags antigas
+        for tag in tags:
+            tag_name = tag['name']
+            if tag_name not in keep_tags:
+                print(f'Removendo tag: {tag_name}')
+                delete_url = f'https://hub.docker.com/v2/repositories/{username}/{repository}/tags/{tag_name}/'
+                requests.delete(delete_url, auth=auth)
+        "
+      env:
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        GITHUB_SHA: ${{ github.sha }}
+
+    - name: Update README with Docker info
+      run: |
+        # Atualizar README com informações da imagem Docker
+        DOCKER_INFO="\n## 🐋 Docker\n\n### Imagem Docker\n\nA imagem Docker está disponível em: [${DOCKERHUB_IMAGE}](https://hub.docker.com/r/${DOCKERHUB_IMAGE}/)\n\n### Versões\n\n- Última versão: \`${DOCKERHUB_IMAGE}:latest\`\n- Versão específica: \`${DOCKERHUB_IMAGE}:${GITHUB_SHA:0:12}\`\n\n### Executar com Docker\n\n\`\`\`bash\ndocker run ${DOCKERHUB_IMAGE}:latest\n\`\`\`"
+        
+        # Adicionar ao README se ainda não existir
+        if ! grep -q "## 🐋 Docker" README.md; then
+          echo -e "$DOCKER_INFO" >> README.md
+        else
+          # Atualizar seção existente
+          sed -i "/## 🐋 Docker/,/## /!b;//!d;/## 🐋 Docker/r <(echo \"$DOCKER_INFO\")" README.md
+        fi
+        
+        # Commit das changes no README
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git commit -m "Atualiza README com informações Docker" || echo "Sem alterações no README"
+        git push
+      env:
+        DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/python-app
+        GITHUB_SHA: ${{ github.sha }}
