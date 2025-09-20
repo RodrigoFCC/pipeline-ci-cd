@@ -62,47 +62,34 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Install jq for JSON processing
+      run: sudo apt-get install -y jq
+
     - name: Clean up old images on DockerHub
       run: |
-        # Instalar dependências para a API do DockerHub
-        pip install dockerhub-api
-
-        # Script para remover tags antigas (exceto latest e a atual)
-        python -c "
-        import os
-        import requests
-        from dockerhub_api import DockerHub
-        
         # Configurações
-        username = os.environ['DOCKERHUB_USERNAME']
-        password = os.environ['DOCKERHUB_TOKEN']
-        repository = 'python-app'
-        current_sha = os.environ['GITHUB_SHA']
+        USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+        PASSWORD="${{ secrets.DOCKERHUB_TOKEN }}"
+        REPOSITORY="python-app"
+        CURRENT_TAG="${GITHUB_SHA:0:12}"
         
-        # Autenticar
-        auth = (username, password)
+        # Obter token de autenticação
+        AUTH_TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${USERNAME}'", "password": "'${PASSWORD}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
         
-        # Obter todas as tags
-        response = requests.get(
-            f'https://hub.docker.com/v2/repositories/{username}/{repository}/tags/',
-            auth=auth
-        )
-        tags = response.json().get('results', [])
+        # Listar todas as tags
+        TAGS=$(curl -s -H "Authorization: JWT ${AUTH_TOKEN}" "https://hub.docker.com/v2/repositories/${USERNAME}/${REPOSITORY}/tags/?page_size=100" | jq -r '.results[] | .name')
         
         # Manter apenas a tag latest e a atual
-        keep_tags = ['latest', current_sha[:12]]
-        
-        # Remover tags antigas
-        for tag in tags:
-            tag_name = tag['name']
-            if tag_name not in keep_tags:
-                print(f'Removendo tag: {tag_name}')
-                delete_url = f'https://hub.docker.com/v2/repositories/{username}/{repository}/tags/{tag_name}/'
-                requests.delete(delete_url, auth=auth)
-        "
+        KEEP_TAGS=("latest" "$CURRENT_TAG")
+        for TAG in $TAGS; do
+          if [[ ! " ${KEEP_TAGS[@]} " =~ " ${TAG} " ]]; then
+            echo "Removendo tag: $TAG"
+            curl -X DELETE -H "Authorization: JWT ${AUTH_TOKEN}" "https://hub.docker.com/v2/repositories/${USERNAME}/${REPOSITORY}/tags/${TAG}/"
+          else
+            echo "Mantendo tag: $TAG"
+          fi
+        done
       env:
-        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         GITHUB_SHA: ${{ github.sha }}
 
     - name: Update README with Docker info
@@ -115,7 +102,8 @@ jobs:
           echo -e "$DOCKER_INFO" >> README.md
         else
           # Atualizar seção existente
-          sed -i "/## 🐋 Docker/,/## /!b;//!d;/## 🐋 Docker/r <(echo \"$DOCKER_INFO\")" README.md
+          sed -i "/## 🐋 Docker/,/## /{//!d}" README.md
+          sed -i "/## 🐋 Docker/a $DOCKER_INFO" README.md
         fi
         
         # Commit das changes no README
