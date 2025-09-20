@@ -106,12 +106,16 @@ jobs:
           sed -i "/## 🐋 Docker/a $DOCKER_INFO" README.md
         fi
         
-        # Commit das changes no README
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+        # Configurar git para o commit
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Fazer commit apenas se houver mudanças
         git add README.md
-        git commit -m "Atualiza README com informações Docker" || echo "Sem alterações no README"
-        git push
+        git diff --staged --quiet || git commit -m "Atualiza README com informações Docker"
+        
+        # Fazer push usando um token com permissões
+        git push https://${{ secrets.PAT }}@github.com/${{ github.repository }}.git HEAD:main
       env:
         DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/python-app
         GITHUB_SHA: ${{ github.sha }}
