@@ -91,31 +91,3 @@ jobs:
         done
       env:
         GITHUB_SHA: ${{ github.sha }}
-
-    - name: Update README with Docker info
-      run: |
-        # Atualizar README com informações da imagem Docker
-        DOCKER_INFO="\n## 🐋 Docker\n\n### Imagem Docker\n\nA imagem Docker está disponível em: [${DOCKERHUB_IMAGE}](https://hub.docker.com/r/${DOCKERHUB_IMAGE}/)\n\n### Versões\n\n- Última versão: \`${DOCKERHUB_IMAGE}:latest\`\n- Versão específica: \`${DOCKERHUB_IMAGE}:${GITHUB_SHA:0:12}\`\n\n### Executar com Docker\n\n\`\`\`bash\ndocker run ${DOCKERHUB_IMAGE}:latest\n\`\`\`"
-        
-        # Adicionar ao README se ainda não existir
-        if ! grep -q "## 🐋 Docker" README.md; then
-          echo -e "$DOCKER_INFO" >> README.md
-        else
-          # Atualizar seção existente
-          sed -i "/## 🐋 Docker/,/## /{//!d}" README.md
-          sed -i "/## 🐋 Docker/a $DOCKER_INFO" README.md
-        fi
-        
-        # Configurar git para o commit
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # Fazer commit apenas se houver mudanças
-        git add README.md
-        git diff --staged --quiet || git commit -m "Atualiza README com informações Docker"
-        
-        # Fazer push usando um token com permissões
-        git push https://${{ secrets.PAT }}@github.com/${{ github.repository }}.git HEAD:main
-      env:
-        DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/python-app
-        GITHUB_SHA: ${{ github.sha }}
