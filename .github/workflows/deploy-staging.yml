@@ -1,0 +1,33 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker image tag to deploy (e.g., latest)'
+        required: true
+        default: 'latest'
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://SEU_URL_DO_SERVICO
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to ECS
+        run: |
+          # Use a tag para garantir que você está implantando a versão correta
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/python-app:${{ github.event.inputs.tag }} 123456789012.dkr.ecr.us-east-1.amazonaws.com/python-app:${{ github.event.inputs.tag }}
+          
+          aws ecs update-service --cluster YOUR_ECS_CLUSTER --service YOUR_ECS_SERVICE --force-new-deployment
