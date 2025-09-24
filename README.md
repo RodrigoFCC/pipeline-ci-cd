@@ -3,7 +3,9 @@
 Este é um projeto de exemplo em Python que demonstra a configuração e uso do GitHub Actions para automação de pipelines CI/CD.
 
 # 📋 Descrição
-O projeto contém um script Python simples que gera um arquivo `output.txt` com a data e hora da última execução. O GitHub Actions é configurado para executar automaticamente este script a cada push para a branch principal.
+O projeto contém um script Python simples que gera um arquivo output.txt com a data e hora da última execução. O GitHub Actions é configurado para executar automaticamente este script a cada push para a branch principal.
+
+Este projeto inclui testes de unidade para garantir a qualidade do código antes do build da imagem Docker. A pipeline de CI (Integração Contínua) é responsável por executar esses testes e, se eles passarem, construir e publicar a imagem no Docker Hub. A pipeline de CD (Entrega Contínua), por sua vez, é acionada manualmente para implantar a aplicação na AWS.
 
 # 🚀 Como Executar Localmente
 
@@ -12,6 +14,8 @@ O projeto contém um script Python simples que gera um arquivo `output.txt` com 
  - Python 3.9 ou superior instalado
 
  - Git instalado
+
+ - Docker instalado (para rodar a imagem localmente).
 
 ### Passo a Passo
 
@@ -40,9 +44,15 @@ O comando acima mostrará algo como: `Última execução: 2024-01-15 14:30:45`
 seu-repositorio/
 ├── .github/
 │   └── workflows/
-│       └── python-app.yml    # Configuração do GitHub Actions
+│       ├── python-app.yml    # Pipeline de CI (Testes e Build da Imagem Docker)
+│       └── deploy-staging.yml # Pipeline de CD (Deploy manual)
 ├── main.py                   # Script principal
-├── requirements.txt          # Dependências (vazio neste projeto)
+├── test_main.py              # Testes de unidade
+├── requirements.txt          # Dependências do projeto para testes
+├── requirements-api.txt      # Dependências para a API
+├── Dockerfile                # Arquivo para criar a imagem Docker
+├── ecs-task.json             # Definição de tarefa para o ECS
+├── cleanup.sh                # Script de limpeza de imagens Docker
 └── README.md                 # Este arquivo
 ```
 
