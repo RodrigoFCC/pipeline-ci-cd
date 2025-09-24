@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://SEU_URL_DO_SERVICO
+      url: https://URL
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
